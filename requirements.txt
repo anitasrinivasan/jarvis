@@ -1,7 +1,5 @@
 streamlit==1.32.2
-langchain-community==0.0.27
-langchain-openai==0.0.8
-langchain-core==0.1.30
+langchain==0.1.12
 supabase==2.4.0
 openai==1.14.2
 python-dotenv==1.0.1

@@ -1,11 +1,11 @@
 import os
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_community.embeddings import OpenAIEmbeddings
-from langchain_community.vectorstores import SupabaseVectorStore
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_core.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import ChatOpenAI
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import SupabaseVectorStore
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.chat_models import ChatOpenAI
 from supabase import create_client
 
 # Load environment variables
