@@ -7,3 +7,4 @@ python-dotenv
 pypdf
 unstructured
 langchain-community
+tiktoken
