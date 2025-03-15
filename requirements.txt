@@ -8,3 +8,4 @@ pypdf
 unstructured
 langchain-community
 tiktoken
+langchain_openai
