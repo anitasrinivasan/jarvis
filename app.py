@@ -2,75 +2,16 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 from datetime import datetime
-import traceback
-from langchain_openai import OpenAIEmbeddings, OpenAI
-from langchain_community.vectorstores.chroma import Chroma
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import SupabaseVectorStore
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.tools import Tool
 from langchain.agents import ZeroShotAgent, AgentExecutor
 from langchain.chains import LLMChain
-from typing import Dict, List, Any, Optional
-from pydantic import BaseModel
+from typing import Dict, List, Any
 from supabase import create_client
 import json
-from tenacity import retry, stop_after_attempt, wait_exponential
-import time
-from functools import wraps
-import threading
-from queue import Queue
-
-# Rate limiting setup
-class RateLimiter:
-    def __init__(self, max_requests, time_window):
-        self.max_requests = max_requests
-        self.time_window = time_window
-        self.requests = Queue()
-        self.lock = threading.Lock()
-
-    def __call__(self, func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            with self.lock:
-                current_time = time.time()
-                # Remove old requests
-                while not self.requests.empty():
-                    if current_time - self.requests.queue[0] > self.time_window:
-                        self.requests.get()
-                    else:
-                        break
-                
-                if self.requests.qsize() >= self.max_requests:
-                    sleep_time = self.time_window - (current_time - self.requests.queue[0])
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
-                
-                self.requests.put(current_time)
-            return func(*args, **kwargs)
-        return wrapper
-
-# Retry decorator for API calls
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10)
-)
-def api_call_with_retry(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            st.error(f"API call failed: {str(e)}")
-            raise
-    return wrapper
-
-# Rate limiters
-openai_limiter = RateLimiter(max_requests=50, time_window=60)  # 50 requests per minute
-supabase_limiter = RateLimiter(max_requests=100, time_window=60)  # 100 requests per minute
-
-# Ensure directories exist
-os.makedirs("temp", exist_ok=True)
-os.makedirs("db", exist_ok=True)
 
 # Load environment variables
 load_dotenv()
@@ -82,23 +23,24 @@ if missing_vars:
     st.error(f"Missing required environment variables: {', '.join(missing_vars)}")
     st.stop()
 
+# Ensure temp directory exists
+os.makedirs("temp", exist_ok=True)
+
 # Supabase setup
 supabase_url = os.environ.get("SUPABASE_URL")
 supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase = create_client(supabase_url, supabase_key)
 
-# Initialize models with error handling
-try:
-    embeddings = OpenAIEmbeddings()
-    llm = OpenAI(temperature=0.7)
-except Exception as e:
-    st.error(f"Failed to initialize models. Error: {str(e)}")
-    st.stop()
+# Initialize models
+embeddings = OpenAIEmbeddings()
+llm = ChatOpenAI(model="gpt-4", temperature=0.7)
 
 # Create vector store
-vectorstore = Chroma(
-    persist_directory="db",
-    embedding_function=embeddings
+vectorstore = SupabaseVectorStore(
+    client=supabase,
+    embedding=embeddings,
+    table_name="documents",
+    query_name="match_documents"
 )
 
 # User Profile Management
