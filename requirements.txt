@@ -1,0 +1,8 @@
+langchain
+langgraph
+supabase
+openai
+pandas
+python-dotenv
+pypdf
+unstructured
