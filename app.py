@@ -8,11 +8,14 @@ import traceback
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.tools import Tool
+from langchain_core.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.tools import Tool
 from langchain_community.chat_models import ChatOpenAI
-from langchain.agents import ZeroShotAgent, AgentExecutor
-from langchain.chains import LLMChain
+from langchain_core.agents import AgentExecutor
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnablePassthrough
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 from supabase import create_client
@@ -279,24 +282,29 @@ tools = [
 ]
 
 # Create the agent prompt
-agent_prompt = ZeroShotAgent.create_prompt(
-    tools,
-    prefix="You are an AI assistant helping a user search through their personal knowledge base. Use the available tools to find and provide the most relevant information.",
-    input_variables=["input", "agent_scratchpad"]
-)
-
-# Create the LLM chain
-llm_chain = LLMChain(llm=llm, prompt=agent_prompt)
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are an AI assistant helping a user search through their personal knowledge base. Use the available tools to find and provide the most relevant information."),
+    ("human", "{input}"),
+    MessagesPlaceholder(variable_name="agent_scratchpad")
+])
 
 # Create the agent
-agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+agent = (
+    {
+        "input": lambda x: x["input"],
+        "agent_scratchpad": lambda x: format_to_openai_function_messages(x["intermediate_steps"])
+    }
+    | prompt
+    | llm
+    | OpenAIFunctionsAgentOutputParser()
+)
 
 # Create the agent executor
-agent_executor = AgentExecutor.from_agent_and_tools(
+agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
     verbose=True,
-    handle_parsing_errors=True  # Add this parameter to handle parsing errors
+    handle_parsing_errors=True
 )
 
 # Direct function for query processing
@@ -304,8 +312,8 @@ def process_query(messages):
     try:
         user_message = messages[-1]["content"]
         # If the knowledge base is empty or there's an error, provide a helpful message
-        agent_result = agent_executor.run(input=user_message)
-        return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
+        agent_result = agent_executor.invoke({"input": user_message})
+        return {"messages": messages + [{"role": "assistant", "content": agent_result["output"]}]}
     except Exception as e:
         # Handle any errors and provide a graceful response
         error_message = f"I encountered an issue while processing your request: {str(e)}"
