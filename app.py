@@ -1,162 +1,168 @@
 import os
 import streamlit as st
-import logging
-from pathlib import Path
+from dotenv import load_dotenv
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import SupabaseVectorStore
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.tools import Tool
+from langchain_community.chat_models import ChatOpenAI
+from langchain.agents import ZeroShotAgent
+from langchain.chains import LLMChain
+from langgraph.graph import StateGraph
+from typing import Dict, List, Any, Optional
+from pydantic import BaseModel
+from supabase import create_client
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Display basic app header to make sure Streamlit is working
-st.title("Second Brain Assistant")
-st.write("Loading your personal knowledge assistant...")
-
-# Create temp directory if it doesn't exist
+# Ensure temp directory exists
 os.makedirs("temp", exist_ok=True)
-logger.info("Temp directory created/verified")
 
-# Check if we can access environment variables
-try:
-    # Display environment variable status (without revealing values)
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    
-    if supabase_url and supabase_key and openai_key:
-        st.success("API keys found")
-        logger.info("API keys found")
-    else:
-        missing = []
-        if not supabase_url:
-            missing.append("SUPABASE_URL")
-        if not supabase_key:
-            missing.append("SUPABASE_SERVICE_KEY")
-        if not openai_key:
-            missing.append("OPENAI_API_KEY")
-        st.error(f"Missing API keys: {', '.join(missing)}")
-        logger.error(f"Missing API keys: {', '.join(missing)}")
-        st.stop()
-except Exception as e:
-    st.error(f"Error checking environment variables: {e}")
-    logger.error(f"Error checking environment variables: {e}")
-    st.stop()
+# Load environment variables
+load_dotenv()
 
-# Now, try to import and initialize the main components
-try:
-    # Import required libraries
-    st.write("Loading libraries...")
-    
-    from dotenv import load_dotenv
-    load_dotenv()  # Load environment variables from .env file if available
-    
-    from supabase import create_client
-    st.write("Supabase imported successfully")
-    
-    from langchain.embeddings.openai import OpenAIEmbeddings
-    st.write("LangChain embeddings imported successfully")
-    
-    # Continue with other imports
-    from langchain.vectorstores import SupabaseVectorStore
-    from langchain.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
-    from langchain.tools import Tool
-    from langchain.chat_models import ChatOpenAI
-    from langchain.agents import ZeroShotAgent
-    from langchain.chains import LLMChain
-    from langgraph.graph import StateGraph
-    from typing import Dict, List, Any, Optional
-    from pydantic import BaseModel
-    
-    st.write("All imports successful!")
-    logger.info("All imports successful")
-    
-except Exception as e:
-    st.error(f"Error importing libraries: {str(e)}")
-    logger.error(f"Error importing libraries: {str(e)}")
-    st.stop()
+# Supabase setup
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+supabase = create_client(supabase_url, supabase_key)
 
-# Try to initialize Supabase
-try:
-    st.write("Initializing Supabase...")
-    
-    # Supabase setup
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
-    supabase = create_client(supabase_url, supabase_key)
-    
-    st.write("Supabase initialized successfully!")
-    logger.info("Supabase initialized successfully")
-    
-except Exception as e:
-    st.error(f"Error initializing Supabase: {str(e)}")
-    logger.error(f"Error initializing Supabase: {str(e)}")
-    st.stop()
+# Create embeddings instance
+embeddings = OpenAIEmbeddings()
 
-# Try to initialize OpenAI
-try:
-    st.write("Initializing OpenAI...")
-    
-    # Create embeddings instance
-    embeddings = OpenAIEmbeddings()
-    
-    # Initialize LLM
-    llm = ChatOpenAI()
-    
-    st.write("OpenAI initialized successfully!")
-    logger.info("OpenAI initialized successfully")
-    
-except Exception as e:
-    st.error(f"Error initializing OpenAI: {str(e)}")
-    logger.error(f"Error initializing OpenAI: {str(e)}")
-    st.stop()
+# Create vector store
+vectorstore = SupabaseVectorStore(
+    client=supabase,
+    embedding=embeddings,
+    table_name="documents",
+    query_name="match_documents"
+)
 
-# Try to initialize vector store
-try:
-    st.write("Initializing Vector Store...")
-    
-    # Create vector store
-    vectorstore = SupabaseVectorStore(
-        client=supabase,
-        embedding=embeddings,
-        table_name="documents",
-        query_name="match_documents"
-    )
-    
-    st.write("Vector Store initialized successfully!")
-    logger.info("Vector Store initialized successfully")
-    
-except Exception as e:
-    st.error(f"Error initializing Vector Store: {str(e)}")
-    logger.error(f"Error initializing Vector Store: {str(e)}")
-    st.stop()
+# Initialize LLM
+llm = ChatOpenAI()
 
-# If we get this far, show a success message
-st.success("Basic initialization complete. You can now upload documents and ask questions.")
-
-# Rest of your code would go here, but we'll add simplified versions for testing...
-
-# Simplified document processing function
+# Document processing function
 def process_document(file_path, file_type, metadata={}):
-    try:
-        st.write(f"Processing {file_type} document...")
-        return {"status": "success", "document_count": 1, "chunk_count": 5}
-    except Exception as e:
-        st.error(f"Error processing document: {str(e)}")
-        logger.error(f"Error processing document: {str(e)}")
-        return {"status": "error", "error": str(e)}
+    """Process uploaded documents and store in vector database"""
+    # Select appropriate loader based on file type
+    if file_type == "pdf":
+        loader = PyPDFLoader(file_path)
+    elif file_type == "txt":
+        loader = TextLoader(file_path)
+    elif file_type == "md":
+        loader = UnstructuredMarkdownLoader(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}")
+    
+    # Load the document
+    documents = loader.load()
+    
+    # Add metadata
+    for doc in documents:
+        doc.metadata.update(metadata)
+    
+    # Split into chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_documents(documents)
+    
+    # Add to vector store
+    vectorstore.add_documents(chunks)
+    
+    return {
+        "status": "success",
+        "document_count": len(documents),
+        "chunk_count": len(chunks)
+    }
 
-# Simplified search function
+# Search tool
 def search_knowledge_base(query):
-    try:
-        st.write(f"Searching for: {query}")
-        return [{"content": "Sample content", "source": "test", "title": "Test Document"}]
-    except Exception as e:
-        st.error(f"Error searching knowledge base: {str(e)}")
-        logger.error(f"Error searching knowledge base: {str(e)}")
-        return []
+    """Search for information in the knowledge base"""
+    docs = vectorstore.similarity_search(query, k=5)
+    results = []
+    for doc in docs:
+        results.append({
+            "content": doc.page_content,
+            "source": doc.metadata.get("source", "Unknown"),
+            "title": doc.metadata.get("title", "Untitled")
+        })
+    return results
 
-# Add a simple UI to test functionality
-st.subheader("Upload a document")
+# Full document retrieval
+def get_document_by_title(title):
+    """Retrieve a specific document by title"""
+    response = supabase.table("documents").select("*").ilike("metadata->>title", f"%{title}%").execute()
+    return response.data
+
+# Define tools
+tools = [
+    Tool(
+        name="search_knowledge_base",
+        description="Search for information in the user's saved documents, notes, and bookmarks. Input should be a specific question.",
+        func=search_knowledge_base
+    ),
+    Tool(
+        name="get_document_by_title",
+        description="Retrieve a complete document by its title or partial title match.",
+        func=get_document_by_title
+    )
+]
+
+# Define state
+class AgentState(BaseModel):
+    messages: List[Dict[str, Any]]
+    agent_outcome: Optional[Dict[str, Any]] = None
+
+# Create agent prompt
+PREFIX = """You are a personal knowledge assistant with access to the user's knowledge base.
+Your job is to help them find, recall, and use information from their saved content.
+You have access to the following tools:"""
+
+FORMAT_INSTRUCTIONS = """Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question"""
+
+SUFFIX = """Begin!
+
+Question: {input}
+Thought: """
+
+# Create the agent
+prompt = ZeroShotAgent.create_prompt(
+    tools,
+    prefix=PREFIX,
+    format_instructions=FORMAT_INSTRUCTIONS,
+    suffix=SUFFIX
+)
+
+agent_chain = ZeroShotAgent(llm_chain=LLMChain(llm=llm, prompt=prompt), tools=tools)
+
+# Define agent node
+def agent_node(state):
+    messages = state.messages
+    user_message = messages[-1]["content"]
+    agent_result = agent_chain.run(input=user_message)
+    return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
+
+# Create graph
+graph = StateGraph(AgentState)
+graph.add_node("agent", agent_node)
+graph.add_edge("agent", "END")
+
+# Compile
+workflow = graph.compile()
+
+# Streamlit UI
+st.title("Second Brain Assistant")
+
+# File upload
 uploaded_file = st.file_uploader("Upload a document to your knowledge base", 
                                type=["pdf", "txt", "md"])
 
@@ -167,25 +173,34 @@ if uploaded_file:
     
     # Process the file
     file_type = uploaded_file.name.split(".")[-1].lower()
-    with st.spinner("Processing your document..."):
+    with st.spinner(f"Processing {file_type} document..."):
         result = process_document(
             f"temp/{uploaded_file.name}", 
             file_type,
             {"source": uploaded_file.name, "title": uploaded_file.name}
         )
     
-    if result["status"] == "success":
-        st.success(f"Document processed successfully! Added {result['chunk_count']} chunks to your knowledge base.")
-    else:
-        st.error(f"Error processing document: {result.get('error', 'Unknown error')}")
+    st.success(f"Document processed successfully! Added {result['chunk_count']} chunks to your knowledge base.")
 
-# Simple chat interface
+# Chat interface
 st.subheader("Ask about your knowledge")
-query = st.text_input("What would you like to know?")
 
-if query:
-    with st.spinner("Thinking..."):
-        results = search_knowledge_base(query)
-        st.write("Here's what I found:")
-        for result in results:
-            st.info(result["content"])
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("What would you like to know?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    with st.chat_message("assistant"):
+        with st.spinner("Searching for: " + prompt):
+            response = workflow.invoke({"messages": st.session_state.messages})
+            st.markdown(response["messages"][-1]["content"])
+    
+    st.session_state.messages.append({"role": "assistant", "content": response["messages"][-1]["content"]})
