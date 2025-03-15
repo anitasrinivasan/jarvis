@@ -44,46 +44,15 @@ vectorstore = SupabaseVectorStore(
     query_name="match_documents"
 )
 
-# User Profile Management
-def save_user_profile(name: str, interests: List[str], projects: List[str]):
-    """Save user profile to Supabase"""
+def suggest_topics() -> List[Dict[str, Any]]:
+    """Generate engaging topics based on the knowledge base"""
     try:
-        profile_data = {
-            "name": name,
-            "interests": interests,
-            "projects": projects
-        }
-        result = supabase.table("user_profiles").upsert(profile_data).execute()
-        return result.data
-    except Exception as e:
-        st.error(f"Error saving user profile: {str(e)}")
-        return None
-
-def get_user_profile():
-    """Retrieve user profile from Supabase"""
-    try:
-        result = supabase.table("user_profiles").select("*").limit(1).execute()
-        return result.data[0] if result.data else None
-    except Exception as e:
-        st.error(f"Error retrieving user profile: {str(e)}")
-        return None
-
-def suggest_topics(user_profile: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """Generate engaging topics based on user's knowledge base and profile"""
-    try:
-        # Combine user interests and projects for context
-        context = ""
-        if user_profile:
-            interests_str = ", ".join(user_profile.get("interests", []))
-            projects_str = ", ".join(user_profile.get("projects", []))
-            context = f"Consider that the user is interested in {interests_str} and working on projects related to {projects_str}. "
-
         # Search for relevant documents
-        query = context + "Find diverse and interesting topics from the knowledge base"
+        query = "Find diverse and interesting topics from the knowledge base"
         docs = vectorstore.similarity_search(query, k=5)
         
         # Use LLM to generate topic suggestions
-        topics_prompt = f"""Based on the following documents and {context}, suggest 3 engaging topics for discussion:
+        topics_prompt = f"""Based on the following documents, suggest 3 engaging topics for discussion:
         {[doc.page_content for doc in docs]}
         
         Format each topic as a JSON object with 'title' and 'description' fields.
@@ -96,15 +65,10 @@ def suggest_topics(user_profile: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         st.error(f"Error suggesting topics: {str(e)}")
         return []
 
-def get_topic_details(topic: str, user_profile: Dict[str, Any] = None) -> Dict[str, Any]:
+def get_topic_details(topic: str) -> Dict[str, Any]:
     """Get detailed information about a specific topic"""
     try:
-        context = ""
-        if user_profile:
-            interests_str = ", ".join(user_profile.get("interests", []))
-            context = f"Consider that the user is interested in {interests_str}. "
-
-        query = f"{context}Find detailed information about: {topic}"
+        query = f"Find detailed information about: {topic}"
         docs = vectorstore.similarity_search(query, k=3)
         
         detail_prompt = f"""Based on these documents:
@@ -247,37 +211,6 @@ def process_query(messages):
 # Streamlit UI
 st.title("Second Brain Assistant")
 
-# Sidebar for user profile
-with st.sidebar:
-    st.subheader("Your Profile")
-    
-    # Initialize session state for profile
-    if "profile_setup" not in st.session_state:
-        st.session_state.profile_setup = False
-        
-    if not st.session_state.profile_setup:
-        with st.form("profile_form"):
-            name = st.text_input("Your Name")
-            interests = st.text_input("Your Interests (comma-separated)")
-            projects = st.text_input("Current Projects (comma-separated)")
-            
-            if st.form_submit_button("Save Profile"):
-                interests_list = [i.strip() for i in interests.split(",") if i.strip()]
-                projects_list = [p.strip() for p in projects.split(",") if p.strip()]
-                save_user_profile(name, interests_list, projects_list)
-                st.session_state.profile_setup = True
-                st.rerun()
-    
-    # Display current profile
-    user_profile = get_user_profile()
-    if user_profile:
-        st.write(f"👋 Welcome, {user_profile['name']}!")
-        st.write("Interests:", ", ".join(user_profile['interests']))
-        st.write("Projects:", ", ".join(user_profile['projects']))
-        if st.button("Edit Profile"):
-            st.session_state.profile_setup = False
-            st.rerun()
-
 # File upload section
 uploaded_file = st.file_uploader("Upload a document", type=['pdf', 'txt', 'md'])
 if uploaded_file is not None:
@@ -311,14 +244,14 @@ if "current_topic" not in st.session_state:
 
 # Generate topics if not in conversation
 if not st.session_state.messages:
-    topics = suggest_topics(user_profile)
+    topics = suggest_topics()
     st.subheader("Let's explore your knowledge base! 🚀")
     st.write("I've found some interesting topics we could discuss:")
     
     for topic in topics:
         if st.button(f"📚 {topic['title']}", key=topic['title']):
             st.session_state.current_topic = topic['title']
-            st.session_state.topic_details = get_topic_details(topic['title'], user_profile)
+            st.session_state.topic_details = get_topic_details(topic['title'])
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": f"Let's explore {topic['title']}! {topic['description']}"
