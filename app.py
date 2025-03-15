@@ -32,63 +32,6 @@ supabase_url = os.environ.get("SUPABASE_URL")
 supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase = create_client(supabase_url, supabase_key)
 
-# Initialize Supabase tables
-def init_supabase():
-    """Initialize Supabase tables if they don't exist"""
-    try:
-        # Try to create user_profiles table using REST API
-        headers = {
-            "apikey": supabase_key,
-            "Authorization": f"Bearer {supabase_key}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        }
-        
-        # SQL to create the table
-        sql = """
-        CREATE TABLE IF NOT EXISTS user_profiles (
-            id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
-            name text,
-            interests text[],
-            projects text[],
-            created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-            updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-        );
-
-        -- Enable RLS
-        ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-
-        -- Create policy
-        DO $$ 
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_policies WHERE tablename = 'user_profiles' AND policyname = 'Enable all access'
-            ) THEN
-                CREATE POLICY "Enable all access" ON user_profiles FOR ALL USING (true) WITH CHECK (true);
-            END IF;
-        END $$;
-        """
-        
-        # Execute the SQL using Supabase's REST API
-        response = requests.post(
-            f"{supabase_url}/rest/v1/rpc/exec",
-            headers=headers,
-            json={"query": sql}
-        )
-        
-        if response.status_code in [200, 201]:
-            st.success("Database initialized successfully")
-        else:
-            st.warning("Database may already be initialized")
-            
-    except Exception as e:
-        st.error(f"Error initializing database: {str(e)}")
-        if "already exists" not in str(e):  # Ignore if table already exists
-            st.stop()
-
-# Initialize tables
-init_supabase()
-
 # Initialize models
 embeddings = OpenAIEmbeddings()
 llm = ChatOpenAI(model="gpt-4", temperature=0.7)
