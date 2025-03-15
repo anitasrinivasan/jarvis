@@ -16,7 +16,7 @@ An AI-powered knowledge base assistant that helps users explore and interact wit
 - OpenAI API key
 - Supabase account and project
 
-## Setup
+## Local Setup
 
 1. Clone the repository:
 ```bash
@@ -55,29 +55,43 @@ streamlit run app.py
 
 ## Production Deployment
 
-### Using Docker
+### Deploy to Heroku
 
-1. Build the Docker image:
+1. Install Heroku CLI and login:
 ```bash
-docker build -t second-brain-assistant .
+heroku login
 ```
 
-2. Run the container:
+2. Create a new Heroku app:
 ```bash
-docker run -d \
-  -p 8501:8501 \
-  --env-file .env \
-  --name second-brain-assistant \
-  second-brain-assistant
+heroku create your-app-name
 ```
+
+3. Set environment variables:
+```bash
+heroku config:set OPENAI_API_KEY=your_key
+heroku config:set SUPABASE_URL=your_url
+heroku config:set SUPABASE_SERVICE_KEY=your_key
+```
+
+4. Deploy:
+```bash
+git push heroku main
+```
+
+### Deploy to Streamlit Cloud
+
+1. Push your code to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Deploy your app by connecting to your GitHub repository
+4. Set the environment variables in the Streamlit Cloud dashboard
 
 ### Environment Variables
 
+Required environment variables:
 - `OPENAI_API_KEY`: Your OpenAI API key
 - `SUPABASE_URL`: Your Supabase project URL
 - `SUPABASE_SERVICE_KEY`: Your Supabase service role key
-- `STREAMLIT_SERVER_PORT`: (Optional) Server port (default: 8501)
-- `STREAMLIT_SERVER_ADDRESS`: (Optional) Server address (default: 0.0.0.0)
 
 ## Maintenance
 
