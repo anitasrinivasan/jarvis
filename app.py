@@ -10,39 +10,62 @@ from langchain.tools import Tool
 from langchain.agents import ZeroShotAgent, AgentExecutor
 from langchain.chains import LLMChain
 from typing import Dict, List, Any
-from supabase import create_client
+from supabase import create_client, Client
 import json
 import requests
 
 # Load environment variables
 load_dotenv()
 
-# Validate required environment variables
-required_env_vars = ['OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY']
-missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-if missing_vars:
-    st.error(f"Missing required environment variables: {', '.join(missing_vars)}")
-    st.stop()
+# Initialize Supabase client
+def init_supabase() -> Client:
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+    
+    if not supabase_url or not supabase_key:
+        st.error("Missing Supabase credentials. Please check your .env file.")
+        st.stop()
+    
+    try:
+        return create_client(supabase_url, supabase_key)
+    except Exception as e:
+        st.error(f"Failed to initialize Supabase: {str(e)}")
+        st.stop()
+
+# Initialize OpenAI
+def init_openai():
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        st.error("Missing OpenAI API key. Please check your .env file.")
+        st.stop()
+    return api_key
 
 # Ensure temp directory exists
 os.makedirs("temp", exist_ok=True)
 
-# Supabase setup
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
-supabase = create_client(supabase_url, supabase_key)
+# Initialize services
+supabase = init_supabase()
+openai_api_key = init_openai()
 
 # Initialize models
-embeddings = OpenAIEmbeddings()
-llm = ChatOpenAI(model="gpt-4", temperature=0.7)
+try:
+    embeddings = OpenAIEmbeddings()
+    llm = ChatOpenAI(model="gpt-4", temperature=0.7)
+except Exception as e:
+    st.error(f"Failed to initialize AI models: {str(e)}")
+    st.stop()
 
 # Create vector store
-vectorstore = SupabaseVectorStore(
-    client=supabase,
-    embedding=embeddings,
-    table_name="documents",
-    query_name="match_documents"
-)
+try:
+    vectorstore = SupabaseVectorStore(
+        client=supabase,
+        embedding=embeddings,
+        table_name="documents",
+        query_name="match_documents"
+    )
+except Exception as e:
+    st.error(f"Failed to initialize vector store: {str(e)}")
+    st.stop()
 
 def suggest_topics() -> List[Dict[str, Any]]:
     """Generate engaging topics based on the knowledge base"""
