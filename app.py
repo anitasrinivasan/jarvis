@@ -12,6 +12,7 @@ from langchain.chains import LLMChain
 from typing import Dict, List, Any
 from supabase import create_client
 import json
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -35,33 +36,55 @@ supabase = create_client(supabase_url, supabase_key)
 def init_supabase():
     """Initialize Supabase tables if they don't exist"""
     try:
-        # Create user_profiles table
-        supabase.table("user_profiles").select("*").limit(1).execute()
-    except Exception as e:
-        if "'public.user_profiles' does not exist" in str(e):
-            # Create the table using SQL
-            supabase.query("""
-                CREATE TABLE IF NOT EXISTS public.user_profiles (
-                    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-                    name TEXT,
-                    interests TEXT[],
-                    projects TEXT[],
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-                );
-                
-                -- Enable Row Level Security
-                ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
-                
-                -- Create policy to allow all operations (for simplicity)
-                CREATE POLICY "Allow all operations" ON public.user_profiles
-                    FOR ALL
-                    USING (true)
-                    WITH CHECK (true);
-            """).execute()
-            st.success("Created user_profiles table")
+        # Try to create user_profiles table using REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        
+        # SQL to create the table
+        sql = """
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+            name text,
+            interests text[],
+            projects text[],
+            created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+            updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+
+        -- Enable RLS
+        ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+        -- Create policy
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_policies WHERE tablename = 'user_profiles' AND policyname = 'Enable all access'
+            ) THEN
+                CREATE POLICY "Enable all access" ON user_profiles FOR ALL USING (true) WITH CHECK (true);
+            END IF;
+        END $$;
+        """
+        
+        # Execute the SQL using Supabase's REST API
+        response = requests.post(
+            f"{supabase_url}/rest/v1/rpc/exec",
+            headers=headers,
+            json={"query": sql}
+        )
+        
+        if response.status_code in [200, 201]:
+            st.success("Database initialized successfully")
         else:
-            st.error(f"Error initializing database: {str(e)}")
+            st.warning("Database may already be initialized")
+            
+    except Exception as e:
+        st.error(f"Error initializing database: {str(e)}")
+        if "already exists" not in str(e):  # Ignore if table already exists
+            st.stop()
 
 # Initialize tables
 init_supabase()
