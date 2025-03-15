@@ -1,9 +1,8 @@
-langchain
-langgraph
-supabase
-openai
-pandas
-python-dotenv
-pypdf
-unstructured
-langchain-community
+streamlit==1.32.2
+langchain-community==0.0.27
+langchain-openai==0.0.8
+supabase==2.4.0
+openai==1.14.2
+python-dotenv==1.0.1
+pypdf==4.1.0
+tiktoken==0.6.0
