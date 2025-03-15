@@ -29,7 +29,11 @@ openai_api_key = init_openai()
 
 # Initialize model
 try:
-    llm = ChatOpenAI(model="gpt-4", temperature=0.7)
+    llm = ChatOpenAI(
+        model="gpt-3.5-turbo",
+        temperature=0.7,
+        streaming=True  # Enable streaming for faster responses
+    )
 except Exception as e:
     st.error(f"Failed to initialize AI model: {str(e)}")
     st.stop()
