@@ -31,6 +31,41 @@ supabase_url = os.environ.get("SUPABASE_URL")
 supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase = create_client(supabase_url, supabase_key)
 
+# Initialize Supabase tables
+def init_supabase():
+    """Initialize Supabase tables if they don't exist"""
+    try:
+        # Create user_profiles table
+        supabase.table("user_profiles").select("*").limit(1).execute()
+    except Exception as e:
+        if "'public.user_profiles' does not exist" in str(e):
+            # Create the table using SQL
+            supabase.query("""
+                CREATE TABLE IF NOT EXISTS public.user_profiles (
+                    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+                    name TEXT,
+                    interests TEXT[],
+                    projects TEXT[],
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+                );
+                
+                -- Enable Row Level Security
+                ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+                
+                -- Create policy to allow all operations (for simplicity)
+                CREATE POLICY "Allow all operations" ON public.user_profiles
+                    FOR ALL
+                    USING (true)
+                    WITH CHECK (true);
+            """).execute()
+            st.success("Created user_profiles table")
+        else:
+            st.error(f"Error initializing database: {str(e)}")
+
+# Initialize tables
+init_supabase()
+
 # Initialize models
 embeddings = OpenAIEmbeddings()
 llm = ChatOpenAI(model="gpt-4", temperature=0.7)
