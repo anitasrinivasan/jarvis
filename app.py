@@ -10,7 +10,7 @@ from langchain.tools import Tool
 from langchain.agents import ZeroShotAgent, AgentExecutor
 from langchain.chains import LLMChain
 from typing import Dict, List, Any
-from supabase.client import Client, create_client
+from supabase import create_client
 import json
 import requests
 
@@ -18,7 +18,7 @@ import requests
 load_dotenv()
 
 # Initialize Supabase client
-def init_supabase() -> Client:
+def init_supabase() -> Any:
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
     
@@ -27,11 +27,7 @@ def init_supabase() -> Client:
         st.stop()
     
     try:
-        options = {
-            "autoRefreshToken": True,
-            "persistSession": True
-        }
-        return create_client(supabase_url, supabase_key, options=options)
+        return create_client(supabase_url, supabase_key)
     except Exception as e:
         st.error(f"Failed to initialize Supabase: {str(e)}")
         st.stop()
