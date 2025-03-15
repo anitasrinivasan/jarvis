@@ -151,16 +151,11 @@ def agent_node(state):
     agent_result = agent_chain.run(input=user_message)
     return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
 
-# Create graph
-graph = StateGraph(AgentState)
-graph.add_node("agent", agent_node)
-
-# Add proper edges with START node
-graph.add_edge("START", "agent")
-graph.add_edge("agent", "END")
-
-# Compile
-workflow = graph.compile()
+# Simplified version - instead of using LangGraph, we'll use a direct function
+def process_query(messages):
+    user_message = messages[-1]["content"]
+    agent_result = agent_chain.run(input=user_message)
+    return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
 
 # Streamlit UI
 st.title("Second Brain Assistant")
@@ -203,7 +198,8 @@ if prompt := st.chat_input("What would you like to know?"):
     
     with st.chat_message("assistant"):
         with st.spinner("Searching for: " + prompt):
-            response = workflow.invoke({"messages": st.session_state.messages})
+            # Use the direct function instead of LangGraph
+            response = process_query(st.session_state.messages)
             st.markdown(response["messages"][-1]["content"])
     
     st.session_state.messages.append({"role": "assistant", "content": response["messages"][-1]["content"]})
