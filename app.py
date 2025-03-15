@@ -7,9 +7,8 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader, Unstru
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.tools import Tool
 from langchain_community.chat_models import ChatOpenAI
-from langchain.agents import ZeroShotAgent
+from langchain.agents import ZeroShotAgent, AgentExecutor
 from langchain.chains import LLMChain
-from langgraph.graph import StateGraph
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 from supabase import create_client
@@ -108,11 +107,6 @@ tools = [
     )
 ]
 
-# Define state
-class AgentState(BaseModel):
-    messages: List[Dict[str, Any]]
-    agent_outcome: Optional[Dict[str, Any]] = None
-
 # Create agent prompt
 PREFIX = """You are a personal knowledge assistant with access to the user's knowledge base.
 Your job is to help them find, recall, and use information from their saved content.
@@ -142,19 +136,18 @@ prompt = ZeroShotAgent.create_prompt(
     suffix=SUFFIX
 )
 
-agent_chain = ZeroShotAgent(llm_chain=LLMChain(llm=llm, prompt=prompt), tools=tools)
+llm_chain = LLMChain(llm=llm, prompt=prompt)
+agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+agent_executor = AgentExecutor.from_agent_and_tools(
+    agent=agent,
+    tools=tools,
+    verbose=True
+)
 
-# Define agent node
-def agent_node(state):
-    messages = state.messages
-    user_message = messages[-1]["content"]
-    agent_result = agent_chain.run(input=user_message)
-    return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
-
-# Simplified version - instead of using LangGraph, we'll use a direct function
+# Direct function for query processing
 def process_query(messages):
     user_message = messages[-1]["content"]
-    agent_result = agent_chain.run(input=user_message)
+    agent_result = agent_executor.run(input=user_message)
     return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
 
 # Streamlit UI
