@@ -6,10 +6,7 @@ from langchain_community.vectorstores import SupabaseVectorStore
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.tools import Tool
-from langchain_community.chat_models import ChatOpenAI
-from langchain.agents import ZeroShotAgent, AgentExecutor, create_react_agent
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain_openai import ChatOpenAI
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 from supabase import create_client
@@ -36,8 +33,8 @@ vectorstore = SupabaseVectorStore(
     query_name="match_documents"
 )
 
-# Initialize LLM
-llm = ChatOpenAI(temperature=0)
+# Initialize OpenAI's GPT-4o model
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # Document processing function
 def process_document(file_path, file_type, metadata={}):
@@ -195,7 +192,7 @@ if uploaded_file:
         st.success(f"Document processed successfully! Added {result['chunk_count']} chunks to your knowledge base.")
     else:
         if "RateLimitError" in result.get("error", ""):
-            st.error("Unable to process document: OpenAI API rate limit exceeded. Please try again later.")
+            st.error("Unable to process document: API rate limit exceeded. Please try again later.")
         elif "APIError" in result.get("error", ""):
             st.error("Unable to process document: Database connection issue. Please check your Supabase setup.")
         else:
