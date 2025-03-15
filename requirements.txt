@@ -6,4 +6,3 @@ supabase==2.4.0
 openai==1.14.2
 python-dotenv==1.0.1
 pypdf==4.1.0
-tiktoken==0.6.0

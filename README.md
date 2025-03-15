@@ -1,137 +1,70 @@
-# Second Brain Assistant
+# Knowledge Base Explorer
 
-An AI-powered knowledge base assistant that helps users explore and interact with their personal knowledge base through engaging conversations and progressive disclosure.
+A simple Streamlit application that allows you to:
+1. Upload PDF documents to build your knowledge base
+2. Chat with an AI about the content of your documents
+3. Explore suggested topics from your knowledge base
 
 ## Features
 
-- Interactive conversation with AI-driven topic suggestions
-- User profile management with interests and projects
-- Document processing (PDF, TXT, MD) with vector storage
-- Progressive disclosure of information
-- Engaging topic exploration with follow-up questions
+- **Document Upload**: Upload PDFs to build your knowledge base
+- **Topic Exploration**: Get AI-suggested topics from your documents
+- **Interactive Chat**: Ask questions about your documents
+- **Persistent Storage**: All documents are stored in Supabase vector store
 
-## Prerequisites
+## Setup
 
-- Python 3.11+
-- OpenAI API key
-- Supabase account and project
+1. Clone this repository
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Create a `.env` file with your credentials:
+   ```
+   OPENAI_API_KEY=your_openai_api_key
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_SERVICE_KEY=your_supabase_service_key
+   ```
+4. Run the app:
+   ```bash
+   streamlit run app.py
+   ```
 
-## Local Setup
+## Supabase Setup
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/second-brain-assistant.git
-cd second-brain-assistant
-```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Copy `.env.example` to `.env` and fill in your credentials:
-```bash
-cp .env.example .env
-```
-
-5. Set up Supabase:
-- Create a new Supabase project
-- Create the required tables using the SQL in `create_user_profiles.sql`
-- Enable vector storage for your project
-- Add your Supabase credentials to `.env`
-
-## Development
-
-Run the application locally:
-```bash
-streamlit run app.py
-```
-
-## Production Deployment
-
-### Deploy to Heroku
-
-1. Install Heroku CLI and login:
-```bash
-heroku login
-```
-
-2. Create a new Heroku app:
-```bash
-heroku create your-app-name
-```
-
-3. Set environment variables:
-```bash
-heroku config:set OPENAI_API_KEY=your_key
-heroku config:set SUPABASE_URL=your_url
-heroku config:set SUPABASE_SERVICE_KEY=your_key
-```
-
-4. Deploy:
-```bash
-git push heroku main
-```
-
-### Deploy to Streamlit Cloud
-
-1. Push your code to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Deploy your app by connecting to your GitHub repository
-4. Set the environment variables in the Streamlit Cloud dashboard
-
-### Environment Variables
-
-Required environment variables:
-- `OPENAI_API_KEY`: Your OpenAI API key
-- `SUPABASE_URL`: Your Supabase project URL
-- `SUPABASE_SERVICE_KEY`: Your Supabase service role key
-
-## Maintenance
-
-- Logs are stored in the `logs` directory
-- Temporary files are stored in the `temp` directory
-- Both directories are automatically created if they don't exist
-
-## Security Considerations
-
-- Never commit `.env` file or any sensitive credentials
-- Use environment variables for all sensitive information
-- Regularly update dependencies for security patches
-- Monitor API usage and set appropriate rate limits
-
-## Troubleshooting
-
-Common issues and solutions:
-
-1. OpenAI API Rate Limits:
-   - Implement appropriate retry mechanisms
-   - Monitor usage and adjust as needed
-
-2. Supabase Connection Issues:
-   - Check network connectivity
-   - Verify credentials and permissions
-   - Monitor database usage
-
-3. Document Processing Errors:
-   - Check file permissions
-   - Verify supported file formats
-   - Monitor temp directory usage
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## License
-
-[Your License Here] 
+1. Create a new Supabase project
+2. Enable Vector store by following [Supabase Vector Store Setup](https://supabase.com/docs/guides/ai-vector-store)
+3. Create a table named `documents` with the following SQL:
+   ```sql
+   create table documents (
+     id bigserial primary key,
+     content text,
+     metadata jsonb,
+     embedding vector(1536)
+   );
+   ```
+4. Create a stored procedure named `match_documents` for similarity search:
+   ```sql
+   create or replace function match_documents (
+     query_embedding vector(1536),
+     match_count int DEFAULT 3
+   ) returns table (
+     id bigint,
+     content text,
+     metadata jsonb,
+     similarity float
+   )
+   language plpgsql
+   as $$
+   begin
+     return query
+     select
+       id,
+       content,
+       metadata,
+       1 - (documents.embedding <=> query_embedding) as similarity
+     from documents
+     order by documents.embedding <=> query_embedding
+     limit match_count;
+   end;
+   $$; 
