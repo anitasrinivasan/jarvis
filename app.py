@@ -40,7 +40,7 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # Document processing function
 def process_document(file_path, file_type, metadata={}):
-@@ -77,21 +77,29 @@
+ @@ -77,21 +77,29 @@
 # Search tool
 def search_knowledge_base(query):
     """Search for information in the knowledge base"""
