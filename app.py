@@ -154,6 +154,9 @@ def agent_node(state):
 # Create graph
 graph = StateGraph(AgentState)
 graph.add_node("agent", agent_node)
+
+# Add proper edges with START node
+graph.add_edge("START", "agent")
 graph.add_edge("agent", "END")
 
 # Compile
