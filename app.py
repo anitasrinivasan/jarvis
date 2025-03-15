@@ -40,19 +40,47 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # Document processing function
 def process_document(file_path, file_type, metadata={}):
- @@ -77,21 +77,29 @@
+    """
+    Process a document and add it to the vector store
+    
+    Args:
+        file_path (str): Path to the document
+        file_type (str): Type of the document (pdf, txt, md)
+        metadata (dict): Additional metadata for the document
+    
+    Returns:
+        dict: Processing result
+    """
+    # Choose appropriate loader based on file type
+    if file_type == 'pdf':
+        loader = PyPDFLoader(file_path)
+    elif file_type == 'txt':
+        loader = TextLoader(file_path)
+    elif file_type == 'md':
+        loader = UnstructuredMarkdownLoader(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}")
+    
+    # Load and split document
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(documents)
+    
+    # Add metadata to splits
+    for split in splits:
+        split.metadata.update(metadata)
+    
+    # Add to vector store
+    vectorstore.add_documents(splits)
+    
+    return {
+        'chunk_count': len(splits),
+        'processed_file': file_path
+    }
+
 # Search tool
 def search_knowledge_base(query):
     """Search for information in the knowledge base"""
-    docs = vectorstore.similarity_search(query, k=5)
-    results = []
-    for doc in docs:
-        results.append({
-            "content": doc.page_content,
-            "source": doc.metadata.get("source", "Unknown"),
-            "title": doc.metadata.get("title", "Untitled")
-        })
-    return results
     try:
         docs = vectorstore.similarity_search(query, k=5)
         results = []
@@ -70,8 +98,6 @@ def search_knowledge_base(query):
 # Full document retrieval
 def get_document_by_title(title):
     """Retrieve a specific document by title"""
-    response = supabase.table("documents").select("*").ilike("metadata->>title", f"%{title}%").execute()
-    return response.data
     try:
         response = supabase.table("documents").select("*").ilike("metadata->>title", f"%{title}%").execute()
         return response.data
@@ -81,21 +107,43 @@ def get_document_by_title(title):
 
 # Define tools
 tools = [
-@@ -141,14 +149,27 @@
+    Tool(
+        name="Search Knowledge Base",
+        func=search_knowledge_base,
+        description="Useful for searching through the user's documents and finding relevant information"
+    ),
+    Tool(
+        name="Get Document by Title",
+        func=get_document_by_title,
+        description="Retrieve a specific document by its title"
+    )
+]
+
+# Create the agent prompt
+agent_prompt = ZeroShotAgent.create_prompt(
+    tools,
+    prefix="You are an AI assistant helping a user search through their personal knowledge base. Use the available tools to find and provide the most relevant information.",
+    input_variables=["input", "agent_scratchpad"]
+)
+
+# Create the LLM chain
+llm_chain = LLMChain(llm=llm, prompt=agent_prompt)
+
+# Create the agent
+agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+
+# Create the agent executor
 agent_executor = AgentExecutor.from_agent_and_tools(
     agent=agent,
     tools=tools,
-    verbose=True
     verbose=True,
     handle_parsing_errors=True  # Add this parameter to handle parsing errors
 )
 
 # Direct function for query processing
 def process_query(messages):
-    user_message = messages[-1]["content"]
-    agent_result = agent_executor.run(input=user_message)
-    return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
     try:
+        user_message = messages[-1]["content"]
         # If the knowledge base is empty or there's an error, provide a helpful message
         agent_result = agent_executor.run(input=user_message)
         return {"messages": messages + [{"role": "assistant", "content": agent_result}]}
@@ -112,17 +160,17 @@ def process_query(messages):
 
 # Streamlit UI
 st.title("Second Brain Assistant")
-@@ -165,34 +186,41 @@
+
+# File upload section
+uploaded_file = st.file_uploader("Upload a document", type=['pdf', 'txt', 'md'])
+if uploaded_file is not None:
+    # Save the file to temp directory
+    with open(f"temp/{uploaded_file.name}", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    
     # Process the file
     file_type = uploaded_file.name.split(".")[-1].lower()
     with st.spinner(f"Processing {file_type} document..."):
-        result = process_document(
-            f"temp/{uploaded_file.name}", 
-            file_type,
-            {"source": uploaded_file.name, "title": uploaded_file.name}
-        )
-    
-    st.success(f"Document processed successfully! Added {result['chunk_count']} chunks to your knowledge base.")
         try:
             result = process_document(
                 f"temp/{uploaded_file.name}", 
